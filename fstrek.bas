@@ -1,10 +1,11 @@
 
-! TREK52 - A version of Star Trek for the VT52 terminal
+! TREK - A version of Star Trek for RSTS/E
 ! Written by Bob Alexander - bob@GalacticStudios.org
 ! Implemented in DEC BASIC-PLUS.
 ! Inspired by the original Star Trek game written by
 ! Mike Mayfield.
 ! Written in 2022. Released to the public domain. No rights reserved.
+! Adapted from TREK52 to also support VT100 sequences by Hans Huebner.
 
 !   Set up the environment
 110 extend
@@ -32,7 +33,11 @@
 !   damage report
 185 commandX% = 25% : commandY% = 14% : damageX% = 0% : damageY% = 14%
 
-!   Initialize the VT52 escape codes
+!   Determine terminal type
+186 terminalType% = fnGetTerminalType%()
+187 if terminalType% = 0 then print "Unknown terminal, can't continue" : stop
+
+!   Initialize the terminal escape codes
 190 q = fnInitializeEscapeCodes
 
 !   Use RSTS' input trick for getting a single character from the
@@ -224,8 +229,30 @@
 !    Modulo function
 2210 def fnmod%(n%, d%) = n% - n% / d% * d%
 
+!    Terminal handling
+2220 def fnGetTerminalType%()
+2225 dim returned%(30)
+2230 change sys(chr$(6%)+chr$(16%)+chr$(0%)+chr$(255%)+chr$(0%)) to returned%
+2235 if returned%(11%) = 128% then goto 2255 ! Hardcopy
+2240 change sys(chr$(6%)+chr$(16%)+chr$(1%)+chr$(255%)+chr$(0%)) to returned%
+2245 if returned%(5) = 3% then fnGetTerminalType% = 1 : goto 2260 ! VT52
+2250 if returned%(25) and 1% then fnGetTerminalType% = 2 : goto 2260 ! ANSI
+2255 fnTerminalType% = 0
+2260 fnend
+
+2300 def fnBareNum$(n%)
+2301 rn$ = num$(n%)
+2302 l% = len(rn$)
+2303 fnBareNum$ = mid(rn$, 2, l% - 2)
+2304 fnend
+
 !    Return a string that will position cursor at x, y
-2310 def fnCursor$(x%, y%) = esc$ + "Y" + chr$(y% + 32%) + chr$(x% + 32%)
+2310 def fnCursor$(x%, y%)
+2320 if terminalType% = 1 then &
+        fnCursor$ = esc$ + "Y" + chr$(y% + 32%) + chr$(x% + 32%)
+2330 if terminalType% = 2 then &
+        fnCursor$ = esc$ + "[" + fnBareNum$(y%+1) + ";" + fnBareNum$(x%+1) + "H"
+2340 fnend
 
 !    Return  a right justified NUM$
 2410 def fnRNum$(n%, width%)
@@ -935,7 +962,7 @@
 !     Welcome the user and print instructions
 32010 def fnWelcome
 32015 print clearScreen$;
-32020 print "                  * * *  VT52 STAR TREK  * * *" : print
+32020 print "                  * * *  RSTS/E STAR TREK  * * *" : print
 32030 print "Do you want instructions (Y, [N])? ";
 32035 a$ = fnGetChar$() : a$ = cvt$$(left(a$, 1), 32%) : print clearScreen$;
 32040 for dummy% = 1% while a$ <> "N"
@@ -964,12 +991,18 @@
 32255 q$ = sys(chr$(2%)) ! Re-enable echoing
 32260 fnend
 
-!     Initialize VT52 escape codes
+!     Initialize terminal escape codes
 32410 def fnInitializeEscapeCodes
 32420 esc$ = chr$(27% + 128%)
 32430 startOfLine$ = chr$(13%)
-32440 clearLine$ = esc$ + "K"
-32450 clearScreen$ = esc$ + "H" + esc$ + "J"
+! VT52
+32440 if terminalType% = 1% then &
+         clearLine$ = esc$ + "K" : &
+         clearScreen$ = esc$ + "H" + esc$ + "J"
+! VT100
+32450 if terminalType% = 2% then &
+         clearLine$ = esc$ + "[K" : &
+         clearScreen$ = esc$ + "[H" + esc$ + "[2J"
 32490 fnend
 
 32500 data "     Instructions", &
